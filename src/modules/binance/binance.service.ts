@@ -2,7 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import binanceApiNode, { Binance, Ticker, Trade } from 'binance-api-node';
 import Redis from 'ioredis';
 import { AllPrice } from 'src/modules/binance/dto/all-price.type';
-import { REDIS_CLIENT } from 'src/modules/redis/redis.const';
+import { REDIS_CLIENT } from 'src/modules/redis/redis.module';
 
 @Injectable()
 export class BinanceService implements OnModuleInit {

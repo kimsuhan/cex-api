@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import binanceApiNode, { Binance, Ticker, Trade } from 'binance-api-node';
 import Redis from 'ioredis';
 import { AllPrice } from 'src/modules/binance/dto/all-price.type';
@@ -6,6 +6,7 @@ import { REDIS_CLIENT } from 'src/modules/redis/redis.module';
 
 @Injectable()
 export class BinanceService implements OnModuleInit {
+  private readonly logger = new Logger(BinanceService.name);
   private latestPrice: Record<string, number> = {};
   private readonly client: Binance;
 
@@ -38,10 +39,10 @@ export class BinanceService implements OnModuleInit {
 
     // 24시간 Ticker 가격
     this.client.ws.ticker(this.symbols, (ticker: Ticker) => {
-      // 거래가 5초 이상 없었으면 ticker 가격 사용
+      // 거래가 1초 이상 없었으면 ticker 가격 사용
       const timeSinceLastTrade =
         ticker.eventTime - (lastTradeTime[ticker.symbol] ?? 0);
-      if (timeSinceLastTrade > 5000) {
+      if (timeSinceLastTrade > 1000) {
         this.latestPrice[ticker.symbol] = parseFloat(ticker.curDayClose);
 
         // Redis에 저장
@@ -58,7 +59,6 @@ export class BinanceService implements OnModuleInit {
     this.client.ws.trades(this.symbols, (trade: Trade) => {
       lastTradeTime[trade.symbol] = trade.eventTime;
       this.latestPrice[trade.symbol] = parseFloat(trade.price);
-
       // Redis에 저장
       void this.savePriceToRedis(
         trade.symbol,
@@ -83,6 +83,10 @@ export class BinanceService implements OnModuleInit {
     eventTime: number,
   ) {
     const pipeline = this.redis.pipeline();
+
+    if (symbol === 'ADAUSDT') {
+      this.logger.log(`Save price to Redis: ${symbol} ${price} [${source}]`);
+    }
 
     // 1. 개별 심볼 상세 정보
     pipeline.hset(`price:${symbol}`, {

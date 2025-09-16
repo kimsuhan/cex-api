@@ -2,14 +2,15 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, timeout } from 'rxjs';
 import { OrderMatchingEnginePayload } from 'src/modules/order/dto/order.type';
+import { ORDER_RABBITMQ_CLIENT } from 'src/modules/rabbitmq/rabbitmq.module';
 
 @Injectable()
 export class OrderService {
   constructor(
-    @Inject('RABBITMQ_CLIENT') private readonly rabbitmq: ClientProxy,
+    @Inject(ORDER_RABBITMQ_CLIENT) private readonly orderClient: ClientProxy,
   ) {}
 
-  async sendOrderToMatchingEngine(order: OrderMatchingEnginePayload) {
+  sendOrderToMatchingEngine(order: OrderMatchingEnginePayload) {
     const pattern = 'process_order';
     const payload = {
       orderId: order.id,
@@ -22,14 +23,18 @@ export class OrderService {
 
     console.log('🚀 Sending order to Java matching engine:', payload);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const result = await firstValueFrom(
-      this.rabbitmq.emit(pattern, payload).pipe(
-        timeout(5000), // 5초 타임아웃
-      ),
-    );
+    this.orderClient.send(pattern, payload).subscribe((result) => {
+      console.log('🚀 Sending order to Java matching engine:', result);
+    });
 
-    console.log(result);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    // const result = await firstValueFrom(
+    //   this.rabbitmq.emit(pattern, payload).pipe(
+    //     timeout(5000), // 5초 타임아웃
+    //   ),
+    // );
+
+    // console.log(result);
   }
 
   async sendPriceUpdate(symbol: string, price: number) {
@@ -38,7 +43,7 @@ export class OrderService {
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return await firstValueFrom(
-      this.rabbitmq.emit(pattern, payload).pipe(timeout(5000)),
+      this.orderClient.emit(pattern, payload).pipe(timeout(5000)),
     );
   }
 
@@ -57,6 +62,6 @@ export class OrderService {
     console.log('🚀 Sending order (async):', payload);
 
     // emit은 바로 실행 (Promise 반환 안함)
-    this.rabbitmq.emit(pattern, payload);
+    this.orderClient.emit(pattern, payload);
   }
 }

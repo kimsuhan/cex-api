@@ -1,7 +1,7 @@
 import { Field, ObjectType } from '@nestjs/graphql';
 
 @ObjectType()
-export class Price {
+export class PriceType {
   @Field()
   price: number;
 }

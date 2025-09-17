@@ -10,8 +10,6 @@ import { OrderModule } from 'src/modules/order/order.module';
 import { PrismaModule } from 'src/modules/prisma/prisma.module';
 import { RabbitMQModule } from 'src/modules/rabbitmq/rabbitmq.module';
 import { RedisModule } from 'src/modules/redis/redis.module';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 
 @Module({
   imports: [
@@ -19,6 +17,9 @@ import { AppService } from './app.service';
       driver: ApolloDriver,
       autoSchemaFile: true,
       playground: true,
+      subscriptions: {
+        'graphql-ws': true,
+      },
       context: ({ req, res }: { req: Request; res: Response }) => ({
         req,
         res,
@@ -36,7 +37,6 @@ import { AppService } from './app.service';
     BinanceModule,
     OrderModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  providers: [],
 })
 export class AppModule {}

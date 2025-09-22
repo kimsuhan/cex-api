@@ -3,6 +3,8 @@ import binanceApiNode, { Binance, Ticker, Trade } from 'binance-api-node';
 import { PubSub } from 'graphql-subscriptions';
 import Redis from 'ioredis';
 import { AllPrice } from 'src/modules/binance/dto/all-price.type';
+import { ChartPrice } from 'src/modules/binance/dto/chart-price.type';
+import { PUB_SUB } from 'src/modules/pubsub/pubsub.module';
 import { REDIS_CLIENT } from 'src/modules/redis/redis.module';
 
 @Injectable()
@@ -18,11 +20,22 @@ export class BinanceService implements OnModuleInit {
   private readonly DEBOUNCE_TIME = 100; // 100ms 디바운싱
   private readonly MAX_UPDATES_PER_SECOND = 10; // 심볼별 초당 최대 업데이트 수
 
-  private readonly symbols = ['BTCUSDT'];
+  private readonly symbols = [
+    'BTCUSDT',
+    'ETHUSDT',
+    'SOLUSDT',
+    'XRPUSDT',
+    'DOGEUSDT',
+    'ADAUSDT',
+    'DOTUSDT',
+    'LINKUSDT',
+    'BCHUSDT',
+    'LTCUSDT',
+  ];
 
   constructor(
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
-    @Inject('PUB_SUB') private readonly pubSub: PubSub,
+    @Inject(PUB_SUB) private readonly pubSub: PubSub,
   ) {
     this.client = binanceApiNode();
   }
@@ -55,19 +68,19 @@ export class BinanceService implements OnModuleInit {
 
     // 1. 가격이 동일한 경우 업데이트하지 않음
     if (currentPrice === newPrice) {
-      this.logger.warn(`Price is the same: ${symbol} ${newPrice}`);
+      // this.logger.warn(`Price is the same: ${symbol} ${newPrice}`);
       return false;
     }
 
     // 2. 디바운싱: 너무 빈번한 업데이트 방지
     if (now - lastUpdate < this.DEBOUNCE_TIME) {
-      this.logger.warn(`Debounce time: ${symbol} ${newPrice}`);
+      // this.logger.warn(`Debounce time: ${symbol} ${newPrice}`);
       return false;
     }
 
     // 3. 업데이트 빈도 제한: 초당 최대 업데이트 수 초과시 방지
     if (updateCount >= this.MAX_UPDATES_PER_SECOND) {
-      this.logger.warn(`Max updates per second: ${symbol} ${newPrice}`);
+      // this.logger.warn(`Max updates per second: ${symbol} ${newPrice}`);
       return false;
     }
 
@@ -145,7 +158,7 @@ export class BinanceService implements OnModuleInit {
    */
   private async publishPriceUpdate(symbol: string, price: number) {
     try {
-      this.logger.log(`Save price to Redis: ${symbol} ${price}`);
+      this.logger.debug(`Save price to Redis: ${symbol} ${price}`);
       await this.pubSub.publish(`PRICE_UPDATED_${symbol}`, {
         priceUpdated: { price },
       });
@@ -217,4 +230,39 @@ export class BinanceService implements OnModuleInit {
       price,
     }));
   }
+
+  /**
+   *
+   * @param symbol
+   * @param price
+   */
+  async tickSavePriceToRedis(symbol: string, price: number) {
+    const pipeline = this.redis.pipeline();
+
+    pipeline.zadd(`chart:${symbol}`, Date.now(), price);
+
+    await pipeline.exec();
+  }
+
+  async getChartPrice(symbol: string): Promise<ChartPrice[]> {
+    const chartData = await this.redis.zrangebyscore(
+      `chart:${symbol}`,
+      Date.now() - 24 * 60 * 60 * 1000, // 24시간 전
+      Date.now(), // 현재
+      'WITHSCORES',
+    );
+
+    const result: ChartPrice[] = [];
+
+    for (let i = 0; i < chartData.length; i += 2) {
+      result.push({
+        price: parseFloat(chartData[i]), // value (price)
+        time: new Date(Number(chartData[i + 1])), // score (timestamp) - 한국시간(UTC+9)으로 변환
+      });
+    }
+
+    return result;
+  }
+
+  // 최근 24시간 데이터 (시간순 정렬)
 }
